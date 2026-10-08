@@ -1,0 +1,241 @@
+
+
+
+@R1
+conf t
+ router ospf 5
+  router-id 172.16.97.111
+  network 172.16.97.111 0.0.0.0 area 
+  network 10.0.15.64      0.0.0.31 area 2
+  network 172.16.160.0  0.0.7.255 area 2
+int e0/0
+ ip ospf priority 0
+!
+int e0/1
+ ip ospf priority 0
+end
+
+
+@R2
+conf t
+ router ospf 5
+  router-id 10.46.187.22
+  network 10.46.187.22  0.0.0.0 area 0
+  network 10.0.15.64    0.0.0.31 area 2
+  network 192.168.0.152 0.0.0.3 area 2
+ int e0/1
+  ip ospf network point-to-point
+end
+
+
+
+@R3
+conf t
+ router ospf 5
+ router-id 192.168.5.33
+ network 192.168.5.3 0.0.0.0 area 0
+ network 172.16.160.0  0.0.7.255 area 2
+ network 192.168.0.152  0.0.0.3 area 2
+ int e0/0
+  ip ospf network point-to-point
+
+
+
+
+
+*******************************************
+/// ANSIBLE
+
+ip phone mac
+
+   1    ccd8.c1fb.12ff    DYNAMIC     Fa0/5
+   1    ccd8.c1fb.2325    DYNAMIC     Fa0/7
+
+
+
+
+
+
+*******************
+
+
+!@CoreBABA
+
+conf t
+ monitor session 1 source int fa0/3,fa0/5,fa0/7
+ monitor session 1 destination int fa0/1,fa0/9
+end
+
+
+
+---CONFIGURE DNS ON UTM-PH---
+@UTM-PH
+conf t
+ ip domain lookup
+ ip name-server 8.8.8.8
+end
+
+
+66.254.114.79 -- youporn.com
+66.254.114.41 -- pornhub.com
+64.98.135.95  -- vivamax.com
+66.254.114.238 -- redtube.com
+66.254.114.234 -- faketaxi.com
+104.16.3.81   -- xhamster.com
+185.53.179.136 -- sulasok.com
+66.254.114.234 -- bangbus.com
+
+
+
+!@UTM-PH
+conf t
+ ip access-list standard FWP1
+  deny 66.254.114.0 0.0.0.255
+  deny host 104.16.3.81 
+  deny host 64.98.135.95
+  deny host 185.53.179.136 
+  permit any
+ interface gig 1
+  ip access-group FWP1 in
+  end
+
+  
+
+
+conf t
+ interface gig 1
+  no ip access-group FWP1 in
+  end
+
+
+
+
+**** FW L4 ***
+
+conf t
+ no ip access-list extended FWP4
+ ip access-list extended FWP4
+ permit tcp Any host www.bet100.com eq 80 log
+ permit tcp Any host www.bet100.com eq 443 log
+ permit icmp Any host www.bet100.com log
+ permit tcp  Any host www.bet100.com eq 22 log
+ permit tcp  Any host www.bet100.com eq 53 log
+ Int gi 1
+  ip access-group FWP4 in
+  end
+
+
+conf t
+ Int gi 1
+  no ip access-group FWP4 in
+  end
+
+
+
+**** TASK
+
+SCCP 2000
+SIP 5060
+IMAP 143
+SMTP 25
+POP3 110
+FTP 21
+TFTP 69
+NTP 123
+
+conf t
+ no ip access-list extended FWP5
+ ip access-list extended FWP5
+ permit tcp Any host www.bet100.com eq 2000 log
+ permit tcp Any host www.bet100.com eq 5060 log
+ permit tcp Any host www.bet100.com eq 143 log
+ permit tcp  Any host www.bet100.com eq 25 log
+ permit tcp  Any host www.bet100.com eq 110 log
+ permit tcp  Any host www.bet100.com eq 21 log
+ permit udp Any host www.bet100.com eq 69 log
+ permit udp Any host www.bet100.com eq 123 log
+ Int gi 1
+  ip access-group FWP5 in
+  end
+
+
+
+
+**** CONFIGURE NAT ****
+STEP 1: DEFINE INSIDE AND OUTSIDE
+@UTM
+
+conf t
+ int g1
+  ip nat outside
+ int g3
+  ip nat inside
+ end
+
+
+
+STEP 2: CREATE AN ACL TO MATCH TRAFFIC
+@UTM
+conf t
+ access list 1 permit any
+end
+
+
+
+STEP 3
+@UTM
+conf t
+ ip nat inside source list 1 int g1 overload
+  end
+
+
+
+conf t
+ int g1
+  ip nat outside
+ int g3
+  ip nat inside
+ access-list 1 permit any
+ ip nat inside source list 1 int g1 overload
+end
+
+
+
+
+==========
+
+WEB1 VM
+
+sudo su
+hostname WEB1
+ifconfig eth0 10.11.11.101 netmask 255.255.255.224 up
+route add default gw 10.11.11.113
+ping 10.11.11.113
+
+
+WEB2 VM
+
+sudo su
+hostname WEB2
+ifconfig eth0 10.11.11.102 netmask 255.255.255.224 up
+route add default gw 10.11.11.113
+ping 10.11.11.113
+
+
+
+conf t
+ ip nat inside source static tcp 10.11.11.101 80  208.8.8.200 8080
+ ip nat inside source static tcp 10.11.11.102 443 208.8.8.200 8443
+
+ ip nat inside source static tcp 10.11.11.101 443 208.8.8.200 443
+ ip nat inside source static tcp 10.11.11.102 80  208.8.8.200 80
+
+end
+
+
+
+
+
+conf t
+ ip nat inside source static tcp 10.11.11.101 22 208.8.8.105 6666
+ ip nat inside source static tcp 10.11.11.102 22 208.8.8.105 6969
